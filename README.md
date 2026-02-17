@@ -2,7 +2,7 @@
 ## Часть 1. Тема, функционал и аудитория
 
 ### Тема
-Тема данной курсовой работы - проектирование высоконагруженного сервиса стимингового кинотеатра на примере [Кинопоиска][https://www.kinopoisk.ru/]
+Тема данной курсовой работы - проектирование высоконагруженного сервиса стимингового кинотеатра на примере [Кинопоиска](https://www.kinopoisk.ru/)
 ### Целевая аудитория
 - Общее число пользователей - 60 млн. [^1]
     - из них 18 млн - смотрящих по мультиподписке Яндекс Плюс в месяц  [^1]
@@ -18,5 +18,5 @@
 
 
 [^1]: [Что смотрели, о чем читали и какие билеты покупали на Кинопоиске в 2025 году](https://www.kinopoisk.ru/media/article/4012180/)
-[^2]: [Анализ сайта Кинопоиск для январь 2026 по версии similarweb.com](https://pro.similarweb.com/#/digitalsuite/websiteanalysis/website-audience/*/999/3m?webSource=Total&key=kinopoisk.ru&selectedTab=geography)
+[^2]: [Анализ сайта Кинопоиск на январь 2026 по версии similarweb.com](https://pro.similarweb.com/#/digitalsuite/websiteanalysis/website-audience/*/999/3m?webSource=Total&key=kinopoisk.ru&selectedTab=geography)
 
