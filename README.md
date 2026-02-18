@@ -23,6 +23,6 @@
 - Тяжелый видеоконтент выносится в CDN [^3]
 
 ### Список источников
-1. [^1]: [Что смотрели, о чем читали и какие билеты покупали на Кинопоиске в 2025 году](https://www.kinopoisk.ru/media/article/4012180/)
-2. [^2]: [Как рекомендации стримингов понимают ваши guilty pleasures. Объясняем на примере алгоритмов Кинопоиска](https://www.kinopoisk.ru/media/article/4012130)
-3. [^3]: [Медиаплатформа](https://infra.yandex.ru/mediaplatforma)
+[^1]: [Что смотрели, о чем читали и какие билеты покупали на Кинопоиске в 2025 году](https://www.kinopoisk.ru/media/article/4012180/)
+[^2]: [Как рекомендации стримингов понимают ваши guilty pleasures. Объясняем на примере алгоритмов Кинопоиска](https://www.kinopoisk.ru/media/article/4012130)
+[^3]: [Медиаплатформа](https://infra.yandex.ru/mediaplatforma)
