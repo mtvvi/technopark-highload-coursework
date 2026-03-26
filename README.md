@@ -623,6 +623,165 @@ ORDER BY (agg_date, user_id, content_id);
 - `ClickHouse` хранит историю событий и агрегаты;
 - сервис рекомендаций читает агрегаты из `ClickHouse`, считает выдачу и записывает готовый top-N в `RecommendationCache`.
 
+## Часть 6. Физическая схема БД
+
+### 6.1 Схема системы
+
+```mermaid
+graph TD
+    subgraph Backend["Backend / API"]
+        API["API Servers"]
+        REC["Recommendation Worker"]
+    end
+
+    subgraph PG["Транзакционный контур (PostgreSQL)"]
+        PGB["PgBouncer"]
+        PGM["Primary"]
+        PGR1["Read Replica 1"]
+        PGR2["Read Replica 2"]
+        PGB --> PGM
+        PGM --> PGR1
+        PGM --> PGR2
+    end
+
+    subgraph REDIS["Кэш и буферы (Redis Cluster)"]
+        R1["ContentCardCache"]
+        R2["RecommendationCache"]
+        R3["PlaybackCheckpointBuffer"]
+    end
+
+    subgraph SEARCH["Поиск (OpenSearch / Elasticsearch)"]
+        ES["SearchIndex"]
+    end
+
+    subgraph BUS["Асинхронная шина"]
+        KAFKA["Kafka"]
+    end
+
+    subgraph CH["Аналитика (ClickHouse)"]
+        CH1["watch_events"]
+        CH2["search_events"]
+        CH3["recommendation_events"]
+        CH4["user_content_daily_agg"]
+    end
+
+    subgraph OBJ["Object Storage (S3 / MinIO)"]
+        S3POSTER["PosterImageStore"]
+        S3MEDIA["MediaPackageStore"]
+    end
+
+    subgraph CDN["CDN / Edge Cache"]
+        EDGE["CdnSegmentCache"]
+    end
+
+    API --> PGB
+    API --> R1
+    API --> R2
+    API --> R3
+    API --> ES
+    API --> S3POSTER
+    API --> S3MEDIA
+    API -- "events" --> KAFKA
+    REC --> CH4
+    REC --> R2
+    KAFKA --> CH1
+    KAFKA --> CH2
+    KAFKA --> CH3
+    S3MEDIA --> EDGE
+```
+
+В отличие от 5 части, здесь показана не предметная модель, а физическое размещение данных по кластерам и потокам:
+- `PostgreSQL` обслуживает OLTP;
+- `Redis` снимает горячие read/write сценарии;
+- `OpenSearch / Elasticsearch` обслуживает полнотекстовый поиск;
+- `Kafka + ClickHouse` образуют аналитический контур;
+- `S3 + CDN` обслуживают тяжёлый медиаконтент.
+
+### 6.2 Денормализация
+
+В физической схеме используются следующие денормализации:
+
+1. `ContentCardCache` хранит готовую сериализованную карточку контента, чтобы каталог и главная страница не собирали её из OLTP-таблиц на каждый запрос.
+2. `RecommendationCache` хранит уже рассчитанный `top-N` по пользователю.
+3. `SearchIndex` дублирует текстовые поля и признаки ранжирования из `ContentItem`.
+4. `UserContentDailyAgg` хранит дневные агрегаты по пользователю и контенту вместо повторного расчёта по сырым событиям.
+
+### 6.3 Таблица с описанием таблиц и хранилищ
+
+| Таблица / данные | СУБД / хранилище | Индексы | Денормализация | Шардирование и резервирование | Назначение |
+|---|---|---|---|---|---|
+| `UserAccount`, `UserCredential`, `UserSettings` | `PostgreSQL` | PK по `user_id`, unique по `login` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Профиль, логин, парольный хэш, настройки |
+| `AuthSession` | `PostgreSQL` | PK по `session_id`, B-Tree по `user_id`, `expires_at` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Refresh-сессии, устройства, управление логином |
+| `ContentItem` | `PostgreSQL` | PK по `content_id`, B-Tree по `parent_content_id`, `(content_type, release_year)` | Нет | Не шардируется; read replica для разгрузки чтения | Канонический каталог контента |
+| `WatchlistItem` | `PostgreSQL` | composite PK `(user_id, content_id)`, B-Tree `(user_id, added_at)` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Список «Буду смотреть» |
+| `WatchProgress` | `PostgreSQL` | composite PK `(user_id, content_id, device_id)`, B-Tree `(user_id, updated_at)` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Актуальный progress после коалессации |
+| `Rating` | `PostgreSQL` | composite PK `(user_id, content_id)`, B-Tree по `content_id` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Индивидуальные оценки |
+| `Review` | `PostgreSQL` | PK по `review_id`, B-Tree `(content_id, created_at)` | Нет | Hash-шардинг по `user_id`; primary + 2 replica | Отзывы и рецензии |
+| `SearchIndex` | `OpenSearch / Elasticsearch` | inverted index по `title_terms`, `description_terms` | Да, дублирует текст и признаки ранжирования | shard routing по `content_id`; replica shard | Полнотекстовый поиск |
+| `ContentCardCache` | `Redis Cluster` | key-value по `content_id` | Да, хранит готовую карточку | hash slot по ключу; replica на каждый master | Горячий кэш карточек каталога |
+| `RecommendationCache` | `Redis Cluster` | key `(user_id, rank)` | Да, хранит готовый top-N | hash slot по `user_id`; replica на каждый master | Онлайн-выдача рекомендаций |
+| `PlaybackCheckpointBuffer` | `Redis Cluster` | key `(user_id, content_id, device_id)` | Да, in-memory merge checkpoint | hash slot по `user_id`; replica на каждый master | Буфер высокочастотной записи прогресса |
+| `PosterImageStore` | `S3 / MinIO` | object key `object_key` | Нет | key-prefix distribution; георепликация бакетов | Origin-хранилище постеров |
+| `MediaPackageStore` | `S3 / MinIO` | object key `object_key` | Нет | key-prefix distribution; георепликация бакетов | Origin-хранилище manifests и сегментов |
+| `CdnSegmentCache` | `CDN / edge cache` | key `(region_id, object_key)` | Да, временный edge-кэш origin-объектов | кэш на каждом edge-узле; восстановим из origin | Раздача manifests и сегментов |
+| `WatchEventsCH` | `ClickHouse` | `ORDER BY (user_id, event_ts, content_id)` | Нет | shard по `user_id`, partition по месяцу, replica shard | Сырые события просмотра |
+| `SearchEventsCH` | `ClickHouse` | `ORDER BY (user_id, event_ts)` | Нет | shard по `user_id`, partition по месяцу, replica shard | События поиска и кликов |
+| `RecommendationEventsCH` | `ClickHouse` | `ORDER BY (user_id, event_ts, rank)` | Нет | shard по `user_id`, partition по месяцу, replica shard | События показов и кликов рекомендаций |
+| `UserContentDailyAggCH` | `ClickHouse` | PK `(agg_date, user_id, content_id)` | Да, агрегированная витрина | shard по `user_id`, partition по месяцу, replica shard | Фичи и аналитика для рекомендаций |
+
+### 6.4 Индексы
+
+Используемые типы индексов и способы адресации:
+
+- `PostgreSQL`: в основном `B-Tree`, так как ключевые сценарии состоят из точечных выборок по `user_id`, `content_id`, `session_id` и диапазонов по времени.
+- `OpenSearch / Elasticsearch`: inverted index по текстовым полям.
+- `Redis`: доступ по ключу, без secondary-индексов.
+- `ClickHouse`: вместо обычных вторичных индексов используются `ORDER BY` и партиционирование.
+- `S3 / CDN`: доступ по `object_key`.
+
+### 6.5 Выбор СУБД, клиентские библиотеки и интеграции
+
+| Хранилище | Причина выбора | Библиотека / интеграция |
+|---|---|---|
+| `PostgreSQL` | ACID, строгая консистентность, удобные secondary-индексы | `pgx` |
+| `PgBouncer` | мультиплексирование соединений к PostgreSQL | server-side pooler |
+| `Redis Cluster` | минимальная задержка для кэшей и буферов | `go-redis` |
+| `OpenSearch / Elasticsearch` | полнотекстовый поиск и ранжирование | `opensearch-go` или `go-elasticsearch` |
+| `Kafka` | буферизация и доставка событий в асинхронные потребители | `segmentio/kafka-go` или `confluent-kafka-go` |
+| `ClickHouse` | дешёвая аналитика на больших потоках событий | `clickhouse-go` |
+| `S3 / MinIO` | хранение тяжёлых медиаобъектов | `minio-go` или AWS S3 SDK |
+| `CDN` | массовая edge-раздача сегментов | HTTP origin integration |
+
+### 6.6 Балансировка запросов и мультиплексирование подключений
+
+| Хранилище | Механизм | Как работает |
+|---|---|---|
+| `PostgreSQL` | `PgBouncer` + read/write split | запись идёт на primary, чтение переводится на replica, а соединения агрегируются пулером |
+| `Redis Cluster` | cluster-aware client | клиент сам маршрутизирует запрос по hash slot |
+| `OpenSearch / Elasticsearch` | coordinator nodes / HTTP LB | поисковые запросы балансируются по data nodes |
+| `ClickHouse` | batch ingest + distributed tables | ingest-сервис или Kafka-консьюмеры пишут события пачками |
+| `S3 / MinIO` | object gateway | backend работает с origin-хранилищем по API |
+| `CDN / edge cache` | GeoDNS / Anycast | пользователю отдаётся контент с ближайшего edge |
+
+### 6.7 Схема резервного копирования
+
+| Хранилище | Что бэкапится | Схема |
+|---|---|---|
+| `PostgreSQL` | пользовательские данные, каталог, прогресс, оценки, отзывы, сессии | ежедневный full backup + WAL-архивирование, `PITR` |
+| `Redis Cluster` | кэши обычно не бэкапятся как критичные данные | допустима потеря кэшей и последних checkpoint-секунд |
+| `OpenSearch / Elasticsearch` | поисковый индекс | snapshot в `S3`, при необходимости rebuild из `ContentItem` |
+| `ClickHouse` | сырые события и агрегаты | backup replicated tables + retention policy |
+| `S3 / MinIO` | постеры, manifests, сегменты | versioning + георепликация бакетов |
+| `CDN / edge cache` | не бэкапится | полностью восстанавливается из `S3` origin |
+
+### 6.8 Обоснование выбора физической схемы
+
+1. `PostgreSQL` покрывает транзакционный контур, где критичны согласованность и обновления по пользователю.
+2. Самая тяжёлая запись в системе изолирована в `PlaybackCheckpointBuffer`, поэтому OLTP не принимает десятки тысяч мелких checkpoint-записей напрямую.
+3. Полнотекстовый поиск вынесен в отдельный search-кластер, чтобы не перегружать каталоговые таблицы.
+4. `ClickHouse` получает асинхронные события через `Kafka`, поэтому аналитика и рекомендации не конкурируют с online-запросами.
+5. Медиаобъекты физически отделены от OLTP и живут в `S3`, а пик раздачи сегментов уходит в `CDN`.
+
 ## Список источников
 [^1]: [Что смотрели, о чем читали и какие билеты покупали на Кинопоиске в 2025 году](https://www.kinopoisk.ru/media/article/4012180/)
 [^2]: [Как рекомендации стримингов понимают ваши guilty pleasures. Объясняем на примере алгоритмов Кинопоиска](https://www.kinopoisk.ru/media/article/4012130)
