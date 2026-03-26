@@ -563,19 +563,41 @@ ER-диаграмма ниже покрывает только online-serving к
 
 ```mermaid
 graph TD
-    subgraph Backend["Services / Recomendation"]
+    subgraph APP["Application Layer"]
         API["Backend Services"]
         REC["Recommendation Worker"]
     end
 
-    subgraph PG["Транзакционный контур (PostgreSQL)"]
+    subgraph PGPOOL["Connection Multiplexing"]
         PGB["PgBouncer"]
+    end
+
+    subgraph PG["Транзакционный контур (PostgreSQL)"]
         PGM["Primary"]
         PGR1["Read Replica 1"]
         PGR2["Read Replica 2"]
+        UA["UserAccount"]
+        UC["UserCredential"]
+        US["UserSettings"]
+        AS["AuthSession"]
+        CI["ContentItem"]
+        WI["WatchlistItem"]
+        WP["WatchProgress"]
+        RA["Rating"]
+        RV["Review"]
+
         PGB --> PGM
         PGM --> PGR1
         PGM --> PGR2
+        PGM --> UA
+        PGM --> UC
+        PGM --> US
+        PGM --> AS
+        PGM --> CI
+        PGM --> WI
+        PGM --> WP
+        PGM --> RA
+        PGM --> RV
     end
 
     subgraph REDIS["Кэш и буферы (Redis Cluster)"]
@@ -588,15 +610,15 @@ graph TD
         ES["SearchIndex"]
     end
 
-    subgraph BUS["Асинхронная шина"]
+    subgraph BUS["Асинхронная шина данных"]
         KAFKA["Kafka"]
     end
 
     subgraph CH["Аналитика (ClickHouse)"]
-        CH1["watch_events"]
-        CH2["search_events"]
-        CH3["recommendation_events"]
-        CH4["user_content_daily_agg"]
+        CH1["WatchEventsCH"]
+        CH2["SearchEventsCH"]
+        CH3["RecommendationEventsCH"]
+        CH4["UserContentDailyAggCH"]
     end
 
     subgraph OBJ["Object Storage (S3 / MinIO)"]
@@ -615,15 +637,22 @@ graph TD
     API --> ES
     API --> S3POSTER
     API --> S3MEDIA
+    API --> EDGE
     API -- "events" --> KAFKA
     REC --> CH4
     REC --> R2
+    CI -. "reindex" .-> ES
     KAFKA --> CH1
     KAFKA --> CH2
     KAFKA --> CH3
     S3MEDIA --> EDGE
 ```
 
+- `UserAccount`, `UserCredential`, `UserSettings`, `AuthSession`, `ContentItem`, `WatchlistItem`, `WatchProgress`, `Rating`, `Review` физически хранятся в `PostgreSQL`;
+- `ContentCardCache`, `RecommendationCache`, `PlaybackCheckpointBuffer` лежат в `Redis Cluster`;
+- `SearchIndex` живёт в `OpenSearch / Elasticsearch`;
+- `WatchEventsCH`, `SearchEventsCH`, `RecommendationEventsCH`, `UserContentDailyAggCH` лежат в `ClickHouse`;
+- `PosterImageStore` и `MediaPackageStore` лежат в `S3 / MinIO`, а `CdnSegmentCache` расположен на edge-узлах `CDN`;
 - `PostgreSQL` обслуживает OLTP;
 - `Redis` снимает горячие read/write сценарии;
 - `OpenSearch / Elasticsearch` обслуживает полнотекстовый поиск;
