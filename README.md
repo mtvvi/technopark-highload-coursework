@@ -563,8 +563,8 @@ ER-диаграмма ниже покрывает только online-serving к
 
 ```mermaid
 graph TD
-    subgraph Backend["Backend / API"]
-        API["API"]
+    subgraph Backend["Services / Recomendation"]
+        API["Backend Services"]
         REC["Recommendation Worker"]
     end
 
