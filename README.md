@@ -901,7 +901,7 @@ graph TD
 
 ## Часть 11. Выбор оборудования и хостинга
 
-### 11.1 Базовый расчёт аппаратных ресурсов
+### 11.1 Базовый расчёт нагрузки
 
 Для расчёта оборудования используются пиковые технические метрики, полученные ранее.
 
@@ -924,75 +924,46 @@ graph TD
 | Progress checkpoint API | `~3000 checkpoint RPS / vCPU` |
 | Event Collector / простые Kafka consumers | `~5000 events/s / vCPU` |
 
-Для production закладывается запас `~30%`:
+Для production-развёртывания закладывается запас `~30%`:
 
 `ресурсы_с_запасом = расчётные_ресурсы × 1.3`
 
 Запас нужен на:
 - неравномерность нагрузки;
-- отказ одного pod-а или node;
+- отказ pod-а или node;
 - rolling update;
-- failover между регионами;
+- временный failover между регионами;
 - накладные расходы Kubernetes и service discovery.
 
 ---
 
-### 11.2 Развёртывание в Kubernetes
+### 11.2 Расчёт ресурсов stateless-сервисов
 
-В Kubernetes запускаются:
+В Kubernetes запускаются API-сервисы, BFF, Event Collector, Recommendation API, OnlineRanker и фоновые workers.  
+Stateful-компоненты тоже могут запускаться в Kubernetes, но на отдельных node pools через `StatefulSet` / operators / PersistentVolume.
 
-- stateless API-сервисы;
-- BFF;
-- Event Collector;
-- фоновые workers;
-- stateful-системы через `StatefulSet` / Kubernetes operators.
-
-Stateful-компоненты не размещаются вместе с обычными API pod-ами. Для них выделяются отдельные node pools:
-
-| Тип node pool | Что запускается | Особенности |
-|---|---|---|
-| `app-pool` | stateless API, BFF, workers | обычные Deployment-ы, HPA, rolling update |
-| `db-pool` | PostgreSQL, Cassandra | local PV / NVMe, anti-affinity, backup |
-| `queue-pool` | Kafka, Redis | стабильные диски, anti-affinity, отдельные limits |
-| `search-analytics-pool` | OpenSearch, ClickHouse | NVMe, отдельные ресурсы под scan/index workloads |
-| `storage-pool` | Ceph RGW / S3-compatible object storage | HDD + NVMe cache, высокая сетевая полоса |
-
-Для stateful в Kubernetes используются:
-- `StatefulSet`;
-- `PersistentVolume`;
-- `nodeSelector`;
-- `podAntiAffinity`;
-- `topologySpreadConstraints`;
-- операторы для PostgreSQL, Cassandra, Kafka, ClickHouse, Redis, OpenSearch и Ceph.
-
-То есть Kubernetes используется не только для stateless, но stateful-компоненты изолируются на отдельных node pools.
-
----
-
-### 11.3 Ресурсы stateless-сервисов в Kubernetes
-
-| Сервис | Тип нагрузки | CPU/r | CPU/l | RAM/r | RAM/l | Pods |
-|---|---|---:|---:|---:|---:|---:|
-| `Auth Service` | лёгкое API | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
-| `User Profile Service` | лёгкое API | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
-| `Catalog Service` | карточки, metadata, enrichment | 1 | 2 | 2 GiB | 4 GiB | 8 |
-| `Search Service` | OpenSearch + fallback | 1 | 2 | 2 GiB | 4 GiB | 3 |
-| `Movie Page Composition / BFF` | композиция карточки фильма | 1 | 2 | 2 GiB | 4 GiB | 6 |
-| `UserActivity Service` | избранное, отзывы, рейтинги | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
-| `Playback Session Service` | старт просмотра, access check | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
-| `Progress Service` | checkpoint API | 1 | 2 | 1.5 GiB | 3 GiB | 12 |
-| `ProgressWriter Worker` | checkpoint → Cassandra | 1 | 2 | 1.5 GiB | 3 GiB | 6 |
-| `Event Collector API` | клиентские события | 1 | 2 | 2 GiB | 4 GiB | 4 |
-| `Analytics Consumers` | Kafka → ClickHouse | 1 | 2 | 2 GiB | 4 GiB | 4 |
-| `Recommendation API` | выдача рекомендаций | 1 | 2 | 2 GiB | 4 GiB | 8 |
-| `OnlineRanker` | online ranking | 1 | 2 | 2 GiB | 4 GiB | 8 |
-| `RecentActivityConsumer` | свежие события пользователя | 1 | 2 | 2 GiB | 4 GiB | 2 |
-| `Recommendation Training / Candidate Worker` | offline batch | 4 | 8 | 16 GiB | 32 GiB | 4 |
-| `FallbackFeedWorker` | fallback-рекомендации | 2 | 4 | 8 GiB | 16 GiB | 2 |
-| `PopularSearchWorker` | popular search cache | 1 | 2 | 4 GiB | 8 GiB | 2 |
-| `Outbox Publishers` | outbox → Kafka | 1 | 2 | 2 GiB | 4 GiB | 2 |
-| `Search / Cache Workers` | indexing, fallback index, cache invalidation | 1 | 2 | 2 GiB | 4 GiB | 3 |
-| `Media Ingest Service` | загрузка постеров и video packages | 1 | 2 | 2 GiB | 4 GiB | 2 |
+| Сервис | Целевая нагрузка | CPU/r | CPU/l | RAM/r | RAM/l | Pods |
+|---|---:|---:|---:|---:|---:|---:|
+| `Auth Service` | `~22 RPS` | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
+| `User Profile Service` | `~100 RPS` | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
+| `Catalog Service` | `~6000 RPS` | 1 | 2 | 2 GiB | 4 GiB | 8 |
+| `Search Service` | `~444 RPS` | 1 | 2 | 2 GiB | 4 GiB | 3 |
+| `Movie Page Composition / BFF` | `~4444 RPS` | 1 | 2 | 2 GiB | 4 GiB | 6 |
+| `UserActivity Service` | `~51 RPS` | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
+| `Playback Session Service` | `~222 RPS` | 0.5 | 1 | 1 GiB | 2 GiB | 3 |
+| `Progress Service` | `~26 667 RPS` | 1 | 2 | 1.5 GiB | 3 GiB | 12 |
+| `ProgressWriter Worker` | `~26 667 events/s` | 1 | 2 | 1.5 GiB | 3 GiB | 6 |
+| `Event Collector API` | `~10 000 events/s` | 1 | 2 | 2 GiB | 4 GiB | 4 |
+| `Analytics Consumers` | `~10 000 events/s` | 1 | 2 | 2 GiB | 4 GiB | 4 |
+| `Recommendation API` | `~4444 RPS` | 1 | 2 | 2 GiB | 4 GiB | 8 |
+| `OnlineRanker` | `~4444 RPS` | 1 | 2 | 2 GiB | 4 GiB | 8 |
+| `RecentActivityConsumer` | `~10 000 events/s` | 1 | 2 | 2 GiB | 4 GiB | 2 |
+| `Recommendation Training / Candidate Worker` | batch | 4 | 8 | 16 GiB | 32 GiB | 4 |
+| `FallbackFeedWorker` | batch | 2 | 4 | 8 GiB | 16 GiB | 2 |
+| `PopularSearchWorker` | batch | 1 | 2 | 4 GiB | 8 GiB | 2 |
+| `Outbox Publishers` | event publishing | 1 | 2 | 2 GiB | 4 GiB | 2 |
+| `Search / Cache Workers` | indexing / cache invalidation | 1 | 2 | 2 GiB | 4 GiB | 3 |
+| `Media Ingest Service` | upload API | 1 | 2 | 2 GiB | 4 GiB | 2 |
 
 Итого по stateless-контуру:
 
@@ -1004,132 +975,129 @@ Stateful-компоненты не размещаются вместе с обы
 
 ---
 
-### 11.4 Kubernetes worker nodes
+### 11.3 Kubernetes node pools
 
-Для stateless worker-node выбирается конфигурация:
+Для production используются серверы с большим количеством серверных ядер.  
+Базовый compute-node:
 
-| Название | Конфигурация |
-|---|---|
-| `k8s-worker` | `32 CPU cores / 128 GiB RAM / 2×NVMe / 2×25GbE` |
+| Node pool | Конфигурация node | Где используется |
+|---|---|---|
+| `app-pool` | `128 CPU cores / 512 GiB RAM / 2×NVMe / 2×100GbE` | stateless API, BFF, workers |
+| `db-pool` | `128 CPU cores / 512 GiB RAM / 4×NVMe / 100GbE` | PostgreSQL, Cassandra |
+| `queue-pool` | `128 CPU cores / 256 GiB RAM / 4×NVMe / 100GbE` | Kafka, Redis |
+| `search-analytics-pool` | `128 CPU cores / 512 GiB RAM / 4×NVMe / 100GbE` | OpenSearch, ClickHouse |
+| `storage-pool` | `128 CPU cores / 512 GiB RAM / 24×HDD + NVMe cache / 2×100GbE` | Ceph RGW / S3-compatible Object Storage |
+| `cdn-edge-pool` | `128 CPU cores / 256 GiB RAM / NVMe cache / 2×100GbE` | CDN edge |
 
-Расчёт по CPU:
+Для stateless-сервисов по чистому CPU было бы достаточно:
 
-`130 vCPU / 32 CPU ≈ 4.1 node`
+`130 vCPU / 128 CPU ≈ 1.02 node`
 
-Но из-за 6 регионов и отказоустойчивости нужно минимум несколько node на регион.  
-Принимается:
+Но из-за 6 регионов, отказоустойчивости и rolling update принимается минимум `3 app-node` на регион:
 
-| ДЦ | Доля API-трафика | Worker nodes |
-|---|---:|---:|
-| Москва | 45.0% | 4 |
-| Санкт-Петербург | 9.5% | 3 |
-| Ростов-на-Дону | 10.0% | 3 |
-| Екатеринбург | 17.0% | 3 |
-| Новосибирск | 12.5% | 3 |
-| Владивосток | 6.0% | 3 |
-| **Итого** | 100% | **19** |
+`6 регионов × 3 app-node = 18 app-node`
 
-Общая ёмкость stateless worker-node:
+Ёмкость app-pool:
 
-`19 × 32 CPU = 608 CPU cores`
+`18 × 128 CPU = 2304 CPU cores`
 
-`19 × 128 GiB = 2432 GiB RAM`
+`18 × 512 GiB = 9216 GiB RAM`
+
+Такой запас нужен не из-за среднего CPU, а из-за регионального размещения, failover и требований отказоустойчивости.
 
 ---
 
-### 11.5 Stateful-компоненты в Kubernetes
+### 11.4 Stateful в Kubernetes
 
-Stateful-компоненты запускаются в Kubernetes через отдельные node pools и операторы.
+Stateful-компоненты запускаются в Kubernetes на отдельных node pools.
 
 | Компонент | Размещение | Count | Обоснование |
 |---|---|---:|---|
 | `PostgreSQL` | `db-pool`, PostgreSQL operator | 3 | `primary + replica + standby/replica`; OLTP/master-данные |
 | `Cassandra` | `db-pool`, Cassandra operator | 6 | write-heavy progress и recommendation candidates |
-| `Redis` | `queue-pool`, Redis operator | 18 | cache-группы: sessions, cards, progress, recommendations, recent activity |
+| `Redis` | `queue-pool`, Redis operator | 18 | cache-группы по регионам: sessions, cards, progress, recommendations, recent activity |
 | `Kafka` | `queue-pool`, Kafka operator | 6 | partitions, replication, consumer groups, DLQ |
 | `OpenSearch` | `search-analytics-pool`, OpenSearch operator | 6 | `3 data nodes + 3 master/coordinator nodes` |
 | `ClickHouse` | `search-analytics-pool`, ClickHouse operator | 6 | `3 shards × 2 replicas`; события и аналитика |
 | `S3-compatible Object Storage` | `storage-pool`, Ceph / Rook operator | 8 | video origin, manifests, постеры, статика |
 
-Для stateful-подов используются:
-- `PersistentVolume` на локальных NVMe/HDD;
-- anti-affinity, чтобы реплики не попадали на один node;
+Для stateful workloads используются:
+- `StatefulSet`;
+- `PersistentVolume`;
+- `nodeSelector`;
+- `podAntiAffinity`;
+- `topologySpreadConstraints`;
 - backup / snapshot policies;
-- resource requests/limits;
-- отдельные node pools, чтобы БД не конкурировали с API-сервисами.
+- отдельные node pools, чтобы базы не конкурировали с API-сервисами.
 
 ---
 
-### 11.6 Выбор модели хостинга
+### 11.5 Выбор модели хостинга
 
-Выбирается гибридная bare-metal / colocation модель:
+Сравниваются три варианта:
 
-| Контур | Выбранная модель | Провайдер / реализация |
+| Модель | Что это | Плюсы | Минусы |
+|---|---|---|---|
+| Полностью облачная модель | VM / Managed Kubernetes / Managed DB / Cloud CDN | быстрый старт, managed-сервисы | дорогой egress, дорогие managed stateful-сервисы, vendor lock-in |
+| Аренда bare-metal / dedicated | физические серверы у провайдера | нет единовременной покупки железа, проще старт | дороже на длинной дистанции, меньше контроля над сетью и storage-layout |
+| Покупка серверов + colocation | собственные rack-серверы в ДЦ | выгоднее при постоянной нагрузке, контроль сети и хранилищ | нужна эксплуатация железа |
+
+Выбранная модель:
+
+| Контур | Выбранная модель | Реализация |
 |---|---|---|
-| Production backend | Kubernetes на bare-metal серверах в colocation | Selectel Colocation как основной вариант размещения |
-| Stateful-хранилища | Stateful workloads в Kubernetes на выделенных node pools | Kubernetes operators + local PV |
-| CDN edge | собственные edge-серверы в региональных ДЦ | региональные colocation-площадки + private peering; transit как резерв |
-| Object Storage origin | storage node pool в Kubernetes | Ceph RGW как S3-compatible Object Storage |
-| CI/CD, тесты, временные окружения | облачные VM | Yandex Cloud |
-| Оценка покупки серверов | стандартные x86 rack-серверы с амортизацией на 5 лет | цены по публичным конфигураторам серверного оборудования |
+| Production backend | Kubernetes на bare-metal в colocation | `app-pool` |
+| Stateful-хранилища | Stateful workloads в Kubernetes | отдельные node pools + operators |
+| CDN edge | собственные edge-серверы в региональных ДЦ | private peering + transit как резерв |
+| Object Storage origin | storage node pool | Ceph RGW как S3-compatible Object Storage |
+| CI/CD, тесты | облачные VM | Yandex Cloud / временные окружения |
 
-Причина выбора: для стримингового кинотеатра главный cost driver — видеотрафик:
+Главная причина выбора: для Кинопоиска основной cost driver — не CPU backend-а, а видеотрафик:
 
 `~2400 Гбит/с` пикового CDN-трафика.
 
-Полностью облачная модель была бы дорогой из-за egress/CDN-трафика и managed stateful-сервисов. Поэтому production выгоднее размещать на bare-metal/colocation, а облако использовать только для CI/CD и тестов.
-
 ---
 
-### 11.7 Сравнение стоимости моделей хостинга
+### 11.6 Сравнение стоимости: облако vs аренда vs покупка
 
-Сравним три модели:
+Для сравнения берём видеотрафик.  
+Пиковая полоса CDN:
 
-| Модель | Плюсы | Минусы | Оценка стоимости |
-|---|---|---|---:|
-| Полностью облако | быстрый старт, managed-сервисы | дорогой egress, дорогие managed DB/Kafka, vendor lock-in | самый дорогой вариант |
-| Аренда dedicated / bare-metal | нет CapEx, быстрее старт | дороже на длинной дистанции, меньше контроля | средний вариант |
-| Собственные серверы + colocation | дешевле при постоянной нагрузке, контроль сети и storage | нужна эксплуатация железа | выбранный вариант |
+`2400 Гбит/с`
 
-#### Сравнение по видеотрафику
+Для месячного egress считаем среднюю полосу как `50%` от пика:
 
-Из расчёта нагрузки:
+`avg_bandwidth = 2400 × 0.5 = 1200 Гбит/с`
 
-`12.96 ПБ / день`
+Перевод в ГБ/месяц:
 
-За месяц:
+`1200 Гбит/с / 8 = 150 ГБ/с`
 
-`12.96 ПБ × 30 = 388.8 ПБ / месяц`
+`150 ГБ/с × 86 400 сек/день × 30 дней = 388 800 000 ГБ/мес`
 
-В гигабайтах:
+`388 800 000 ГБ = 388.8 ПБ/мес`
 
-`388.8 ПБ = 388 800 000 ГБ`
+Если считать облачный egress по `1 ₽/ГБ`:
 
-Если считать облачный egress даже по `1 ₽ / ГБ`:
+`388 800 000 × 1 = 388.8 млн ₽/мес`
 
-`388 800 000 ГБ × 1 ₽ = 388.8 млн ₽ / месяц`
+Если по `2 ₽/ГБ`:
 
-Если по `2 ₽ / ГБ`:
+`388 800 000 × 2 = 777.6 млн ₽/мес`
 
-`388 800 000 ГБ × 2 ₽ = 777.6 млн ₽ / месяц`
-
-Для собственной CDN-сети через colocation, private peering и transit сетевой контур оценивается примерно в:
-
-`~75 млн ₽ / месяц`
-
-Итог:
-
-| Вариант | Backend / серверы | Сеть и CDN | Итоговая оценка |
+| Модель | Серверы / compute | Сеть / CDN | Итог |
 |---|---:|---:|---:|
-| Полностью облако | удобно, но managed stateful дороже | egress может стоить сотни млн ₽/мес | `~400–800+ млн ₽/мес` |
-| Аренда dedicated / bare-metal | дороже амортизации своего железа | сеть всё равно считается отдельно | `~85–120 млн ₽/мес` |
-| Собственные серверы + colocation | амортизация железа `~1.84 млн ₽/мес` + стойки `~1.62 млн ₽/мес` | CDN/peering/transit `~75 млн ₽/мес` | `~80–85 млн ₽/мес` |
+| Полностью облако | `~30–60 млн ₽/мес` за compute + managed stateful | `~388–778 млн ₽/мес` за egress при `1–2 ₽/ГБ` | `~420–840 млн ₽/мес` |
+| Аренда bare-metal / dedicated | `~45–55 млн ₽/мес` за аренду 128-core серверов | `~75 млн ₽/мес` за CDN/peering/transit | `~120–130 млн ₽/мес` |
+| Покупка серверов + colocation | `~6.15 млн ₽/мес` амортизация | `~75 млн ₽/мес` за CDN/peering/transit | `~84–86 млн ₽/мес` |
 
-Вывод: для небольшого API-сервиса облако было бы удобнее, но для видеосервиса с постоянным большим трафиком выгоднее bare-metal / colocation.
+Вывод: облако удобно для запуска и тестов, но для постоянного видеотрафика становится самым дорогим вариантом.  
+Аренда bare-metal дешевле облака, но на длинной дистанции дороже покупки.  
+Для production выбирается покупка серверов + colocation.
 
 ---
 
-### 11.8 Конфигурации серверов
+### 11.7 Конфигурации серверов и стоимость покупки
 
 Цены оборудования являются ориентировочными.  
 Для учебного расчёта используется порядок стоимости стандартных x86 rack-серверов нужной конфигурации.
@@ -1138,42 +1106,44 @@ Stateful-компоненты запускаются в Kubernetes через о
 
 `месячная стоимость = цена покупки / 60 месяцев`
 
-Курс для расчёта:
+Курс:
 
 `1 $ ≈ 90 ₽`
 
 | Пул оборудования | Конфигурация | Cores | Count | Покупка за 1 шт | Покупка всего | Амортизация / мес |
 |---|---|---:|---:|---:|---:|---:|
-| `Kubernetes worker nodes` | `32 CPU / 128 GiB RAM / 2×NVMe / 2×25GbE` | 32 | 19 | `$8 000` | `$152 000` | `$2 533` |
-| `L4 Load Balancer` | `8 CPU / 32 GiB RAM / 2×10GbE` | 8 | 12 | `$3 500` | `$42 000` | `$700` |
-| `L7 API Gateway / NGINX` | `16 CPU / 64 GiB RAM / 2×10GbE` | 16 | 12 | `$6 000` | `$72 000` | `$1 200` |
-| `CDN edge` | `16 CPU / 128 GiB RAM / NVMe cache / 100GbE` | 16 | 33 | `$12 000` | `$396 000` | `$6 600` |
-| `PostgreSQL nodes` | `32 CPU / 256 GiB RAM / 2×NVMe 3.84TB / 25GbE` | 32 | 3 | `$12 000` | `$36 000` | `$600` |
-| `Cassandra nodes` | `32 CPU / 128 GiB RAM / 2×NVMe 7.68TB / 25GbE` | 32 | 6 | `$10 000` | `$60 000` | `$1 000` |
-| `Redis nodes` | `8 CPU / 64 GiB RAM / NVMe / 10GbE` | 8 | 18 | `$5 000` | `$90 000` | `$1 500` |
-| `Kafka brokers` | `16 CPU / 64 GiB RAM / 2×NVMe 3.84TB / 25GbE` | 16 | 6 | `$9 000` | `$54 000` | `$900` |
-| `OpenSearch nodes` | `16 CPU / 64 GiB RAM / NVMe / 25GbE` | 16 | 6 | `$7 000` | `$42 000` | `$700` |
-| `ClickHouse nodes` | `32 CPU / 128 GiB RAM / 4×NVMe 7.68TB / 25GbE` | 32 | 6 | `$14 000` | `$84 000` | `$1 400` |
-| `Object Storage nodes` | `16 CPU / 128 GiB RAM / 24×HDD 20TB + NVMe cache / 2×100GbE` | 16 | 8 | `$25 000` | `$200 000` | `$3 333` |
-| **Итого** | — | — | **129** | — | **`$1 228 000`** | **`$20 467`** |
+| `Kubernetes app-worker nodes` | `128 CPU / 512 GiB RAM / 2×NVMe / 2×100GbE` | 128 | 18 | `$22 000` | `$396 000` | `$6 600` |
+| `L4 Load Balancer` | `128 CPU / 256 GiB RAM / NVMe / 2×100GbE` | 128 | 12 | `$16 000` | `$192 000` | `$3 200` |
+| `L7 API Gateway / NGINX` | `128 CPU / 256 GiB RAM / NVMe / 2×100GbE` | 128 | 12 | `$22 000` | `$264 000` | `$4 400` |
+| `CDN edge` | `128 CPU / 256 GiB RAM / NVMe cache / 2×100GbE` | 128 | 33 | `$38 000` | `$1 254 000` | `$20 900` |
+| `PostgreSQL nodes` | `128 CPU / 512 GiB RAM / 4×NVMe / 100GbE` | 128 | 3 | `$36 000` | `$108 000` | `$1 800` |
+| `Cassandra nodes` | `128 CPU / 512 GiB RAM / 4×NVMe 7.68TB / 100GbE` | 128 | 6 | `$38 000` | `$228 000` | `$3 800` |
+| `Redis nodes` | `128 CPU / 256 GiB RAM / NVMe / 100GbE` | 128 | 18 | `$24 000` | `$432 000` | `$7 200` |
+| `Kafka brokers` | `128 CPU / 256 GiB RAM / 4×NVMe / 100GbE` | 128 | 6 | `$36 000` | `$216 000` | `$3 600` |
+| `OpenSearch nodes` | `128 CPU / 512 GiB RAM / 4×NVMe / 100GbE` | 128 | 6 | `$34 000` | `$204 000` | `$3 400` |
+| `ClickHouse nodes` | `128 CPU / 512 GiB RAM / 4×NVMe 7.68TB / 100GbE` | 128 | 6 | `$48 000` | `$288 000` | `$4 800` |
+| `Object Storage nodes` | `128 CPU / 512 GiB RAM / 24×HDD 20TB + NVMe cache / 2×100GbE` | 128 | 8 | `$65 000` | `$520 000` | `$8 667` |
+| **Итого** | — | — | **128** | — | **`$4 102 000`** | **`$68 367`** |
 
 В рублях:
 
-`$20 467 × 90 ≈ 1 842 000 ₽ / месяц`
+`$68 367 × 90 = 6 153 030 ₽/мес`
+
+Округляем:
+
+`~6.15 млн ₽/мес`
 
 ---
 
-### 11.9 Расчёт CDN edge
+### 11.8 Расчёт CDN edge
 
-Для CDN главным ограничителем является сетевая полоса.
+CDN считается отдельно, потому что главным ограничителем является не CPU, а сеть.
 
-Пиковая полоса видеотрафика:
+Пиковая полоса CDN:
 
 `~2400 Гбит/с`
 
-Один CDN edge-узел:
-
-`100 Гбит/с`
+Один CDN edge-узел имеет два `100GbE` интерфейса, но для расчёта активной полезной ёмкости берём `100 Гбит/с` на узел, чтобы оставить запас на overhead, пики и отказ.
 
 Формула:
 
@@ -1194,89 +1164,83 @@ CDN edge cache не является durable-хранилищем.
 
 ---
 
-### 11.10 Colocation и сеть
+### 11.9 Colocation и сеть
 
-Для размещения `129` серверов принимается `9` стоек.  
-Расчёт сделан с запасом по unit-ам, питанию и сетевому оборудованию.
+Для размещения `128` серверов принимается `10` стоек.  
+Расчёт сделан с запасом по unit-ам, питанию, охлаждению и сетевому оборудованию.
 
 | Статья | Расчёт | Оценка |
 |---|---:|---:|
-| Colocation одной стойки | — | `~180 000 ₽ / мес` |
-| Количество стоек | — | `9` |
-| **Итого colocation** | `9 × 180 000` | **`1 620 000 ₽ / мес`** |
+| Colocation одной стойки | — | `~250 000 ₽/мес` |
+| Количество стоек | — | `10` |
+| **Итого colocation** | `10 × 250 000` | **`2 500 000 ₽/мес`** |
 
-Основная статья расходов — сетевой CDN-контур.
+Сетевой CDN-контур:
 
-Учебная оценка:
-
-`10 Гбит/с ≈ 310 000 ₽ / мес`
+`10 Гбит/с ≈ 310 000 ₽/мес`
 
 Для `2400 Гбит/с`:
 
-`2400 / 10 × 310 000 = 74 400 000 ₽ / месяц`
+`2400 / 10 × 310 000 = 74 400 000 ₽/мес`
 
-В production такой объём не покупается как 240 отдельных 10G-каналов. Используются:
+Округляем:
+
+`~75 млн ₽/мес`
+
+В реальном production такой объём не покупается как 240 отдельных 10G-каналов. Используются:
 - private peering;
 - direct interconnect;
 - CDN-пиринги;
 - индивидуальные договоры с операторами связи.
 
-Для расчёта принимается:
+---
 
-`~75 млн ₽ / месяц` на сетевой CDN-контур.
+### 11.10 Итоговая месячная стоимость
+
+| Статья расходов | Расчёт | Оценка в месяц |
+|---|---:|---:|
+| Амортизация серверов | `$68 367 × 90` | `~6.15 млн ₽` |
+| Colocation / стойки / питание | `10 × 250 000` | `~2.50 млн ₽` |
+| Сетевой CDN-контур / peering / transit | `2400 / 10 × 310 000` | `~75.00 млн ₽` |
+| CI/CD, тестовые окружения, временные VM | оценка | `~0.30 млн ₽` |
+| Мониторинг, remote hands, запас на комплектующие | оценка | `~1.50 млн ₽` |
+| **Итого** | `6.15 + 2.50 + 75.00 + 0.30 + 1.50` | **`~85.45 млн ₽/мес`** |
+
+Округляем итоговую стоимость:
+
+`~85 млн ₽/мес`
 
 ---
 
-### 11.11 Итоговая месячная стоимость
+### 11.11 Вывод
 
-| Статья расходов | Оценка в месяц |
-|---|---:|
-| Амортизация серверов | `~1.84 млн ₽` |
-| Colocation / стойки / питание | `~1.62 млн ₽` |
-| Сетевой CDN-контур / peering / transit | `~75.0 млн ₽` |
-| CI/CD, тестовые окружения, временные VM | `~0.3 млн ₽` |
-| Мониторинг, remote hands, запас на замену комплектующих | `~1.0 млн ₽` |
-| **Итого** | **`~80 млн ₽ / месяц`** |
-
-Вычисление:
-
-`1.84 + 1.62 + 75.0 + 0.3 + 1.0 = 79.76 млн ₽ / месяц`
-
-Округляем:
-
-`~80 млн ₽ / месяц`
-
----
-
-### 11.12 Вывод
-
-Для проекта требуется около `129` физических серверов:
+Для проекта требуется около `128` физических серверов.
 
 | Контур | Расчёт | Количество |
 |---|---|---:|
-| Kubernetes worker nodes | `Москва: 4` + `5 регионов × 3` | `19` |
+| Kubernetes app-worker nodes | `6 регионов × 3 app-node` | `18` |
 | L4 Load Balancer | `6 регионов × 2 L4-узла` | `12` |
 | L7 API Gateway / NGINX | `6 регионов × 2 L7-узла` | `12` |
 | CDN edge | `Москва 12 + СПб 4 + Ростов 4 + Екатеринбург 6 + Новосибирск 4 + Владивосток 3` | `33` |
 | PostgreSQL nodes | `primary + replica + standby/replica` | `3` |
-| Cassandra nodes | кластер для write-heavy progress/candidates с репликацией | `6` |
+| Cassandra nodes | write-heavy progress/candidates с репликацией | `6` |
 | Redis nodes | `6 регионов × 3 Redis-узла` для cache-групп | `18` |
-| Kafka brokers | brokers для partitions, replication и consumer groups | `6` |
+| Kafka brokers | partitions, replication, consumer groups, DLQ | `6` |
 | OpenSearch nodes | `3 data nodes + 3 master/coordinator nodes` | `6` |
 | ClickHouse nodes | `3 shards × 2 replicas` | `6` |
-| Object Storage nodes | storage-кластер под video origin и запас роста | `8` |
-| **Итого** | `19 + 12 + 12 + 33 + 3 + 6 + 18 + 6 + 6 + 6 + 8` | **`129`** |
+| Object Storage nodes | video origin и запас роста | `8` |
+| **Итого** | — | **`128`** |
 
-Выбранная модель хостинга — **гибридная bare-metal / colocation модель**.
+Выбранная модель хостинга — **покупка серверов + colocation**.
 
-`Kubernetes` используется для stateless backend-сервисов, worker-ов и stateful workloads на выделенных node pools.  
-CDN edge и сетевой контур считаются отдельно, потому что для стримингового сервиса основной cost driver — не backend CPU, а доставка видео.
+Причина выбора: для Кинопоиска главный cost driver — не backend CPU, а доставка видео.  
+При `~2400 Гбит/с` CDN-трафика полностью облачная модель даёт слишком большую стоимость egress.  
+Аренда bare-metal проще на старте, но дороже на длинной дистанции.  
+Покупка серверов с амортизацией и размещением в colocation даёт минимальную месячную стоимость при постоянной высокой нагрузке.
 
-Итоговая оценка стоимости инфраструктуры:
+Итоговая оценка инфраструктуры:
 
-`~80 млн ₽ / месяц`
-
-Основной вывод: backend API требует умеренного количества CPU/RAM, а главная стоимость Кинопоиска определяется `~2400 Гбит/с` CDN-трафика, edge-серверами, сетью и object storage.
+`~85 млн ₽/мес`
 
 ## Список источников
 [^1]: [Что смотрели, о чем читали и какие билеты покупали на Кинопоиске в 2025 году](https://www.kinopoisk.ru/media/article/4012180/)
