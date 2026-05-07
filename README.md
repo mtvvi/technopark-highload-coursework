@@ -1144,20 +1144,20 @@ CDN edge cache не является durable-хранилищем.
 
 Для проекта требуется около `129` физических серверов:
 
-| Контур | Количество |
-|---|---:|
-| Kubernetes worker nodes | 19 |
-| L4 Load Balancer | 12 |
-| L7 API Gateway / NGINX | 12 |
-| CDN edge | 33 |
-| PostgreSQL nodes | 3 |
-| Cassandra nodes | 6 |
-| Redis nodes | 18 |
-| Kafka brokers | 6 |
-| OpenSearch nodes | 6 |
-| ClickHouse nodes | 6 |
-| Object Storage nodes | 8 |
-| **Итого** | **129** |
+| Контур | Расчёт | Количество |
+|---|---|---:|
+| Kubernetes worker nodes | `Москва: 4` + `5 регионов × 3` | `19` |
+| L4 Load Balancer | `6 регионов × 2 L4-узла` | `12` |
+| L7 API Gateway / NGINX | `6 регионов × 2 L7-узла` | `12` |
+| CDN edge | `Москва 12 + СПб 4 + Ростов 4 + Екатеринбург 6 + Новосибирск 4 + Владивосток 3` | `33` |
+| PostgreSQL nodes | `primary + replica + standby/replica` | `3` |
+| Cassandra nodes | кластер для write-heavy progress/candidates с репликацией | `6` |
+| Redis nodes | `6 регионов × 3 Redis-узла` для cache-групп | `18` |
+| Kafka brokers | brokers для partitions, replication и consumer groups | `6` |
+| OpenSearch nodes | `3 data nodes + 3 master/coordinator nodes` | `6` |
+| ClickHouse nodes | `3 shards × 2 replicas` | `6` |
+| Object Storage nodes | storage-кластер под video origin и запас роста | `8` |
+| **Итого** | `19 + 12 + 12 + 33 + 3 + 6 + 18 + 6 + 6 + 6 + 8` | **`129`** |
 
 Выбранная модель хостинга — **гибридная bare-metal / colocation модель**.
 
