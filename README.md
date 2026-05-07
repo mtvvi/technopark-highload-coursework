@@ -1017,14 +1017,14 @@ Stateful-хранилища (`PostgreSQL`, `Cassandra`, `Kafka`, `ClickHouse`, `
 
 Полностью облачная модель была бы слишком дорогой из-за стоимости egress-трафика и managed stateful-сервисов. Поэтому production-часть выгоднее размещать на bare-metal/colocation, а облако использовать только там, где нужна гибкость.
 
-| Контур | Выбранная модель | Провайдер / источник |
+| Контур | Выбранная модель | Провайдер / реализация |
 |---|---|---|
-| Production backend | Kubernetes на bare-metal в colocation | `Selectel / региональные colocation-площадки` |
-| Stateful-хранилища | выделенные серверы вне Kubernetes | `colocation / bare-metal` |
-| CDN edge | собственные edge-серверы в региональных ДЦ | `colocation + private peering / transit` |
-| Object Storage origin | собственный storage-кластер | `S3-compatible Object Storage` на bare-metal |
-| CI/CD, тесты, временные окружения | дешёвая аренда VM / dedicated servers | `Hostkey / Selectel / Yandex Cloud` |
-| Оценка покупки серверов | покупка железа с амортизацией на 5 лет | `Broadberry / Supermicro-compatible конфигурации` |
+| Production backend | Kubernetes на собственных bare-metal серверах в colocation | Selectel Colocation как основной провайдер размещения |
+| Stateful-хранилища | выделенные bare-metal серверы вне Kubernetes | собственные серверы в Selectel Colocation |
+| CDN edge | собственные edge-серверы в региональных ДЦ | региональные colocation-площадки + private peering; transit используется как резервный/дополнительный канал |
+| Object Storage origin | собственный storage-кластер | Ceph RGW как S3-compatible Object Storage на bare-metal |
+| CI/CD, тесты, временные окружения | облачные VM | Yandex Cloud |
+| Оценка покупки серверов | покупка стандартных x86 rack-серверов с амортизацией на 5 лет | цены по публичным конфигураторам серверного оборудования |
 
 ---
 
