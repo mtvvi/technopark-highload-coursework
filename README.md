@@ -1007,7 +1007,7 @@ Stateful-компоненты тоже могут запускаться в Kube
 
 ---
 
-### 11.4 Stateful в Kubernetes
+### 11.4 Stateful
 
 Stateful-компоненты запускаются в Kubernetes на отдельных node pools.
 
