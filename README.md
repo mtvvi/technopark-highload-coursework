@@ -1443,8 +1443,8 @@ bare-metal аренда для backend/stateful/storage + собственный
 
 [^dell-nic]: [Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter](https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking)
 
-[^pm9a3]: [Samsung PM9A3 3.84TB U.2 NVMe, цена $649.](https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr)
+[^pm9a3]: [Samsung PM9A3 3.84TB U.2 NVMe](https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr)
 
-[^supermicro-storage]: [Supermicro SSG-521E-E1CR24H: 24 hot-swap 3.5" bays, стартовая цена $10 130.29.](https://store.supermicro.com/us_en/ssg-521e-e1cr24h.html)
+[^supermicro-storage]: [Supermicro SSG-521E-E1CR24H: 24 hot-swap 3.5" bays](https://store.supermicro.com/us_en/ssg-521e-e1cr24h.html)
 
-[^wd-hdd]: [WD Ultrastar DC HC560 20TB, пример цены 586.98 €.](https://toptech.lt/hdd-serveriams/hddwestern-digital-ultrastarultrastar-dc-hc560wuh722020ble6l420tbsata512-mb7200-rpm350f38785)
+[^wd-hdd]: [WD Ultrastar DC HC560 20TB](https://toptech.lt/hdd-serveriams/hddwestern-digital-ultrastarultrastar-dc-hc560wuh722020ble6l420tbsata512-mb7200-rpm350f38785)
