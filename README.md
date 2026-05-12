@@ -999,14 +999,14 @@ Stateful-сервисы также можно запускать в Kubernetes, 
 | Класс | Конкретная машина / конфигурация | Цена | Назначение |
 |---|---|---:|---|
 | Compute node | Selectel PL90-NVMe-10GE: 2×Intel Xeon 6710E, 128 cores, 256 GB RAM, 2×1.92 TB NVMe, 10GE | 96 500 ₽/мес | Kubernetes app-pool |
-| Stateful node | Selectel DELL-R7625-02-NVMe-25GE: 2×AMD EPYC 9474F, 96 cores, 256 GB RAM, 4×3.84 TB NVMe, 25GE | 275 900 ₽/мес | БД, Kafka, OpenSearch, ClickHouse |
-| Heavy compute node | Selectel DELL-R7625-01-NVMe-25GE: 2×AMD EPYC 9754, 256 cores, 512 GB RAM, 4×7.68 TB NVMe, 25GE | 362 800 ₽/мес | рассматривался для тяжёлых узлов, но слишком дорог для массового backend-а |
+| Stateful node | Selectel DELL-R7625-02-NVMe-25GE [^dell-r7625]: 2×AMD EPYC 9474F, 96 cores, 256 GB RAM, 4×3.84 TB NVMe, 25GE | 275 900 ₽/мес | БД, Kafka, OpenSearch, ClickHouse |
+| Heavy compute node | Selectel DELL-R7625-01-NVMe-25GE [^dell-r7625]: 2×AMD EPYC 9754, 256 cores, 512 GB RAM, 4×7.68 TB NVMe, 25GE | 362 800 ₽/мес | рассматривался для тяжёлых узлов, но слишком дорог для массового backend-а |
 | HDD storage node | Selectel PBL28-HDD: 32 cores, 64 GB RAM, 8×22 TB HDD, 500 GB NVMe, 10GE | 93 900 ₽/мес | object storage origin |
 | CDN edge base | Dell PowerEdge R7625 24SFF: 2×AMD EPYC 9654, 192 cores, 768 GB RAM, 3×800 GB SSD | от 3 479 000 ₽ | база для собственного CDN edge-сервера |
-| 100GbE NIC | Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 | $1 661.70 | 100GbE-сеть для CDN edge |
-| NVMe cache | Samsung PM9A3 3.84TB U.2 NVMe | $649 | cache-диск для CDN edge |
-| Storage chassis | Supermicro SSG-521E-E1CR24H, 24 hot-swap 3.5" bays | от $10 130.29 | ориентир для собственного object storage |
-| HDD для storage | WD Ultrastar DC HC560 20TB | ~586.98 € | enterprise HDD для object storage |
+| 100GbE NIC | Dell / Mellanox [^dell-nic] ConnectX-6 DX Dual Port 100GbE QSFP56 | $1 661.70 | 100GbE-сеть для CDN edge |
+| NVMe cache | Samsung PM9A3 [^pm9a3] 3.84TB U.2 NVMe | $649 | cache-диск для CDN edge |
+| Storage chassis | Supermicro SSG-521E-E1CR24H [^supermicro-storage], 24 hot-swap 3.5" bays | от $10 130.29 | ориентир для собственного object storage |
+| HDD для storage | WD Ultrastar DC [^wd-hdd] HC560 20TB | ~586.98 € | enterprise HDD для object storage |
 
 ---
 
@@ -1160,7 +1160,7 @@ edge_count = ceil(пиковая_полоса_региона / 100 Гбит/с) 
 | app-pool | Selectel PL90-NVMe-10GE: 128 cores / 256 GB RAM / 2×1.92 TB NVMe / 10GE | 18 | аренда bare-metal |
 | stateful-pool | Selectel DELL-R7625-02-NVMe-25GE: 96 cores / 256 GB RAM / 4×3.84 TB NVMe / 25GE | 33 | аренда bare-metal |
 | object-storage-pool | Selectel PBL28-HDD: 32 cores / 64 GB RAM / 8×22 TB HDD / 500 GB NVMe / 10GE | 18 | аренда bare-metal |
-| cdn-edge-pool | Dell PowerEdge R7625 + 8×PM9A3 3.84TB NVMe + ConnectX-6 DX 2×100GbE | 33 | покупка + colocation |
+| cdn-edge-pool | Dell PowerEdge R7625 + 8×PM9A3[^pm9a3] 3.84TB NVMe + ConnectX-6 DX 2×100GbE | 33 | покупка + colocation |
 | **Итого** | — | **102 сервера** | гибрид |
 
 ---
@@ -1201,8 +1201,8 @@ CDN edge покупается отдельно, потому что публич
 | Компонент | Цена | Источник |
 |---|---:|---|
 | Dell PowerEdge R7625 24SFF, 2×AMD EPYC 9654, 768 GB RAM | 3 479 000 ₽ | Dell reseller |
-| 8×Samsung PM9A3 3.84TB NVMe | 8 × $649 × 75 ₽ = 389 400 ₽ | Samsung PM9A3 market price |
-| Dell / Mellanox ConnectX-6 DX Dual Port 100GbE | $1 661.70 × 75 ₽ = 124 628 ₽ | Dell |
+| 8×Samsung PM9A3[^pm9a3] 3.84TB NVMe | 8 × $649 × 75 ₽ = 389 400 ₽ | Samsung PM9A3 market price |
+| Dell / Mellanox[^dell-nic] ConnectX-6 DX Dual Port 100GbE | $1 661.70 × 75 ₽ = 124 628 ₽ | Dell |
 | **Итого за edge node** | **~3 993 028 ₽** | — |
 
 Для расчёта принимаем курс:
@@ -1272,19 +1272,19 @@ CDN edge-серверы считаем как высокоплотные и се
 
 388 800 000 GB/мес
 
-#### Yandex Cloud CDN
+#### Yandex Cloud CDN [^yandex-cdn]
 
 Yandex Cloud CDN тарифицирует исходящий трафик CDN в интернет по $0.007692 за 1 GB.
 
 388 800 000 × $0.007692 × 75 ₽ ≈ 224 300 000 ₽/мес
 
-#### Selectel cloud outbound
+#### Selectel cloud outbound [^selectel-prices]
 
 У Selectel исходящий трафик сверх лимита в облаке стоит 1.02 ₽/GB.
 
 388 800 000 × 1.02 ₽ ≈ 396 600 000 ₽/мес
 
-#### Cloud.ru Object Storage
+#### Cloud.ru Object Storage [^cloudru-storage]
 
 У Cloud.ru в примере тарификации Object Storage исходящий трафик указан как 1.1712 ₽/GB.
 
@@ -1432,3 +1432,19 @@ bare-metal аренда для backend/stateful/storage + собственный
 [^6]: [Кинопоиск: более 9000 фильмов/сериалов/мультфильмов и около 80 тысяч единиц контента](https://www.kinopoisk.ru/media/news/4003262/)
 [^7]: [Кинопоиск о регулировании онлайн-кинотеатров](https://www.kinopoisk.ru/media/article/4008153/)
 [^8]: [Testing the Performance of NGINX Ingress Controller for Kubernetes](https://blog.nginx.org/blog/testing-performance-nginx-ingress-controller-kubernetes)
+
+[^selectel-prices]: Selectel. Публичный прайс выделенных серверов, colocation и сетевых услуг https://selectel.ru/prices/
+
+[^yandex-cdn]: Yandex Cloud CDN. https://yandex.cloud/en/services/cdn
+
+[^cloudru-storage]: Cloud.ru Object Storage. https://cloud.ru/docs/s3e/ug/topics/pricing
+
+[^dell-r7625]: Dell PowerEdge R7625 24SFF у российского поставщика. https://dell-servers.ru/product/dell-poweredge-r7625-24sff/
+
+[^dell-nic]: Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter. https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking
+
+[^pm9a3]: Samsung PM9A3 3.84TB U.2 NVMe, цена $649. https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr
+
+[^supermicro-storage]: Supermicro SSG-521E-E1CR24H: 24 hot-swap 3.5" bays, стартовая цена $10 130.29. https://store.supermicro.com/us_en/ssg-521e-e1cr24h.html
+
+[^wd-hdd]: WD Ultrastar DC HC560 20TB, пример цены 586.98 €. https://toptech.lt/hdd-serveriams/hddwestern-digital-ultrastarultrastar-dc-hc560wuh722020ble6l420tbsata512-mb7200-rpm350f38785
