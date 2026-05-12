@@ -998,11 +998,11 @@ Stateful-сервисы также можно запускать в Kubernetes, 
 
 | Класс | Конкретная машина / конфигурация | Цена | Назначение |
 |---|---|---:|---|
-| Compute node | Selectel PL90-NVMe-10GE: 2×Intel Xeon 6710E, 128 cores, 256 GB RAM, 2×1.92 TB NVMe, 10GE | 96 500 ₽/мес | Kubernetes app-pool |
+| Compute node | Selectel PL90-NVMe-10GE [^selectel-prices]: 2×Intel Xeon 6710E, 128 cores, 256 GB RAM, 2×1.92 TB NVMe, 10GE | 96 500 ₽/мес | Kubernetes app-pool |
 | Stateful node | Selectel DELL-R7625-02-NVMe-25GE [^dell-r7625]: 2×AMD EPYC 9474F, 96 cores, 256 GB RAM, 4×3.84 TB NVMe, 25GE | 275 900 ₽/мес | БД, Kafka, OpenSearch, ClickHouse |
 | Heavy compute node | Selectel DELL-R7625-01-NVMe-25GE [^dell-r7625]: 2×AMD EPYC 9754, 256 cores, 512 GB RAM, 4×7.68 TB NVMe, 25GE | 362 800 ₽/мес | рассматривался для тяжёлых узлов, но слишком дорог для массового backend-а |
-| HDD storage node | Selectel PBL28-HDD: 32 cores, 64 GB RAM, 8×22 TB HDD, 500 GB NVMe, 10GE | 93 900 ₽/мес | object storage origin |
-| CDN edge base | Dell PowerEdge R7625 24SFF: 2×AMD EPYC 9654, 192 cores, 768 GB RAM, 3×800 GB SSD | от 3 479 000 ₽ | база для собственного CDN edge-сервера |
+| HDD storage node | Selectel PBL28-HDD [^selectel-prices]: 32 cores, 64 GB RAM, 8×22 TB HDD, 500 GB NVMe, 10GE | 93 900 ₽/мес | object storage origin |
+| CDN edge base | Dell PowerEdge R7625 24SFF [^dell-r7625]: 2×AMD EPYC 9654, 192 cores, 768 GB RAM, 3×800 GB SSD | от 3 479 000 ₽ | база для собственного CDN edge-сервера |
 | 100GbE NIC | Dell / Mellanox [^dell-nic] ConnectX-6 DX Dual Port 100GbE QSFP56 | $1 661.70 | 100GbE-сеть для CDN edge |
 | NVMe cache | Samsung PM9A3 [^pm9a3] 3.84TB U.2 NVMe | $649 | cache-диск для CDN edge |
 | Storage chassis | Supermicro SSG-521E-E1CR24H [^supermicro-storage], 24 hot-swap 3.5" bays | от $10 130.29 | ориентир для собственного object storage |
@@ -1160,7 +1160,7 @@ edge_count = ceil(пиковая_полоса_региона / 100 Гбит/с) 
 | app-pool | Selectel PL90-NVMe-10GE: 128 cores / 256 GB RAM / 2×1.92 TB NVMe / 10GE | 18 | аренда bare-metal |
 | stateful-pool | Selectel DELL-R7625-02-NVMe-25GE: 96 cores / 256 GB RAM / 4×3.84 TB NVMe / 25GE | 33 | аренда bare-metal |
 | object-storage-pool | Selectel PBL28-HDD: 32 cores / 64 GB RAM / 8×22 TB HDD / 500 GB NVMe / 10GE | 18 | аренда bare-metal |
-| cdn-edge-pool | Dell PowerEdge R7625 + 8×PM9A3[^pm9a3] 3.84TB NVMe + ConnectX-6 DX 2×100GbE | 33 | покупка + colocation |
+| cdn-edge-pool | Dell PowerEdge R7625 + 8×PM9A3 3.84TB NVMe + ConnectX-6 DX 2×100GbE | 33 | покупка + colocation |
 | **Итого** | — | **102 сервера** | гибрид |
 
 ---
