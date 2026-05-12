@@ -1433,18 +1433,18 @@ bare-metal аренда для backend/stateful/storage + собственный
 [^7]: [Кинопоиск о регулировании онлайн-кинотеатров](https://www.kinopoisk.ru/media/article/4008153/)
 [^8]: [Testing the Performance of NGINX Ingress Controller for Kubernetes](https://blog.nginx.org/blog/testing-performance-nginx-ingress-controller-kubernetes)
 
-[^selectel-prices]: Selectel. Публичный прайс выделенных серверов, colocation и сетевых услуг https://selectel.ru/prices/
+[^selectel-prices]: [Selectel. Публичный прайс выделенных серверов, colocation и сетевых услуг] (https://selectel.ru/prices/)
 
-[^yandex-cdn]: Yandex Cloud CDN. https://yandex.cloud/en/services/cdn
+[^yandex-cdn]: [Yandex Cloud CDN.] (https://yandex.cloud/en/services/cdn)
 
-[^cloudru-storage]: Cloud.ru Object Storage. https://cloud.ru/docs/s3e/ug/topics/pricing
+[^cloudru-storage]: [Cloud.ru Object Storage.] (https://cloud.ru/docs/s3e/ug/topics/pricing)
 
-[^dell-r7625]: Dell PowerEdge R7625 24SFF у российского поставщика. https://dell-servers.ru/product/dell-poweredge-r7625-24sff/
+[^dell-r7625]: [Dell PowerEdge R7625 24SFF у российского поставщика.] (https://dell-servers.ru/product/dell-poweredge-r7625-24sff/)
 
-[^dell-nic]: Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter. https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking
+[^dell-nic]: [Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter]. (https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking)
 
-[^pm9a3]: Samsung PM9A3 3.84TB U.2 NVMe, цена $649. https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr
+[^pm9a3]: [Samsung PM9A3 3.84TB U.2 NVMe, цена $649.] (https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr)
 
-[^supermicro-storage]: Supermicro SSG-521E-E1CR24H: 24 hot-swap 3.5" bays, стартовая цена $10 130.29. https://store.supermicro.com/us_en/ssg-521e-e1cr24h.html
+[^supermicro-storage]: [Supermicro SSG-521E-E1CR24H: 24 hot-swap 3.5" bays, стартовая цена $10 130.29.] (https://store.supermicro.com/us_en/ssg-521e-e1cr24h.html)
 
-[^wd-hdd]: WD Ultrastar DC HC560 20TB, пример цены 586.98 €. https://toptech.lt/hdd-serveriams/hddwestern-digital-ultrastarultrastar-dc-hc560wuh722020ble6l420tbsata512-mb7200-rpm350f38785
+[^wd-hdd]: [WD Ultrastar DC HC560 20TB, пример цены 586.98 €.] (https://toptech.lt/hdd-serveriams/hddwestern-digital-ultrastarultrastar-dc-hc560wuh722020ble6l420tbsata512-mb7200-rpm350f38785)
