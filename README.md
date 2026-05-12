@@ -1441,7 +1441,7 @@ bare-metal аренда для backend/stateful/storage + собственный
 
 [^dell-r7625]: [Dell PowerEdge R7625 24SFF у российского поставщика.](https://dell-servers.ru/product/dell-poweredge-r7625-24sff/)
 
-[^dell-nic]: [Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter].(https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking)
+[^dell-nic]: [Dell / Mellanox ConnectX-6 DX Dual Port 100GbE QSFP56 Network Adapter](https://www.dell.com/en-us/shop/mellanox-connectx-6-dx-dual-port-100gbe-qsfp56-network-adapter-full-height/apd/540-bcxp/networking)
 
 [^pm9a3]: [Samsung PM9A3 3.84TB U.2 NVMe, цена $649.](https://datacenterdisk.com/drives/samsung-3-84tb-nvme-gen4-tfjr)
 
