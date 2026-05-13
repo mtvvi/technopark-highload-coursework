@@ -392,14 +392,14 @@ DNS-балансировка подходит для:
 
 Для **Web/API** используется схема:
 
-`Клиент → L4-балансировщик → L7-балансировщик → backend-сервисы`
+`Клиент - L4-балансировщик - L7-балансировщик - backend-сервисы`
 
 - **L4** распределяет TCP/TLS-соединения между L7-узлами; возможные реализации — **LVS** или **HAProxy** в TCP-режиме; резервирование — **N × 2**.
 - **L7** выполняет **SSL терминацию** и HTTP-маршрутизацию; возможная реализация — **NGINX**; резервирование — **N + 1**.
 
 Для **CDN** используется отдельный контур:
 
-`Клиент → локальное распределение → CDN cache node → origin (при cache miss)`
+`Клиент - локальное распределение - CDN cache node - origin (при cache miss)`
 
 Это связано с тем, что для API и web-трафика важны SSL терминация и L7-маршрутизация, а для видеотрафика CDN основным ограничителем является сетевая пропускная способность.
 
@@ -778,8 +778,8 @@ graph TD
 Поэтому сохранение прогресса выделяется в отдельный `Playback / Progress` контур.  
 `Progress Service` сразу обновляет горячее состояние в `HotProgressCache Redis` и публикует checkpoint-событие в `Kafka`:
 
-`Progress Service → HotProgressCache Redis`  
-`Progress Service → Kafka playback.progress.checkpoints → ProgressWriter → Cassandra PlaybackProgressStore`
+`Progress Service - HotProgressCache Redis`  
+`Progress Service - Kafka playback.progress.checkpoints - ProgressWriter - Cassandra PlaybackProgressStore`
 
 Для промежуточных checkpoint-ов используется алгоритм **coalescing** — коалессация промежуточных записей.  
 Для ключа `(user_id, content_id, device_id)` хранится последнее актуальное значение прогресса. Обновление выполняется по правилу **monotonic merge**:
@@ -844,16 +844,16 @@ graph TD
 
 | Риск / отказ | Архитектурное решение | Как работает при отказе | Эффект для пользователя |
 |---|---|---|---|
-| Перегрузка контура сохранения прогресса просмотра | Выделен отдельный `Playback / Progress` контур: `Progress Service → Kafka playback.progress.checkpoints → ProgressWriter → Cassandra PlaybackProgressStore`; `Redis` используется как `HotProgressCache` | Частые checkpoint-события не пишутся напрямую в `PostgreSQL`. `Kafka` сглаживает поток, а `ProgressWriter` батчами обновляет `Cassandra`. При пике очередь накапливает события, а не валит OLTP-БД | Просмотр видео не ломается при всплеске нагрузки. Возможна задержка обновления позиции, но пользователь не теряет доступ к контенту |
+| Перегрузка контура сохранения прогресса просмотра | Выделен отдельный `Playback / Progress` контур: `Progress Service - Kafka playback.progress.checkpoints - ProgressWriter - Cassandra PlaybackProgressStore`; `Redis` используется как `HotProgressCache` | Частые checkpoint-события не пишутся напрямую в `PostgreSQL`. `Kafka` сглаживает поток, а `ProgressWriter` батчами обновляет `Cassandra`. При пике очередь накапливает события, а не валит OLTP-БД | Просмотр видео не ломается при всплеске нагрузки. Возможна задержка обновления позиции, но пользователь не теряет доступ к контенту |
 | Потеря нескольких последних checkpoint-ов | Для прогресса используется eventual consistency: `Cassandra` хранит durable-состояние, `Redis` — горячее состояние текущей сессии | Если часть checkpoint-ов потеряна, система откроет фильм или серию с последней durable-сохранённой позиции | Пользователь максимум начнёт просмотр на несколько минут раньше, но сервис продолжит работать |
-| Отказ `Redis HotProgressCache` | Read path устроен как `Redis → Cassandra fallback` | `Redis` не является источником истины. При отказе `Redis` `Progress Service` читает прогресс из `Cassandra`, а после восстановления кэш постепенно прогревается заново | Старт фильма или серии может стать чуть медленнее, но прогресс просмотра остаётся доступен |
+| Отказ `Redis HotProgressCache` | Read path устроен как `Redis - Cassandra fallback` | `Redis` не является источником истины. При отказе `Redis` `Progress Service` читает прогресс из `Cassandra`, а после восстановления кэш постепенно прогревается заново | Старт фильма или серии может стать чуть медленнее, но прогресс просмотра остаётся доступен |
 | Перегрузка пользовательской активности, лайков, оценок и счётчиков | `UserActivity Service` сначала публикует событие в `Kafka user.activity.events`, затем `UserActivity Projector Worker` строит проекции в `UserActivity State Store Cassandra` | Частые действия пользователя не пишутся напрямую в SQL-БД. `Kafka` принимает поток событий, а projector идемпотентно обновляет `user_content_state`, `content_counters`, `review_state`, `rating_state` | Лайки, оценки, отзывы и счётчики не ломают основную OLTP-БД. Возможна небольшая задержка отображения нового состояния |
 | Отставание KV-проекции пользовательской активности | Состояние активности хранится как производная Cassandra-проекция из Kafka-событий | Если projector временно отстал, событие уже принято в `Kafka` и будет обработано позже. Повторная обработка безопасна за счёт идемпотентного upsert-а | Пользовательское действие не теряется. Счётчик, оценка или состояние кнопки могут обновиться с задержкой |
 | Отставание или потеря событий индексации каталога | Используются `Catalog Outbox`, `Catalog Outbox Publisher`, `SearchIndexer Worker` и `SearchIndexRepair / Reindex Job` | При изменении фильма или серии запись фиксируется в `Catalog DB` и `catalog_outbox` в одной транзакции. `Catalog Outbox Publisher` отправляет `catalog.content.updated` в `Kafka`. `SearchIndexer Worker` обновляет `OpenSearch`. Если индекс отстал, `SearchIndexRepair / Reindex Job` сравнивает `catalog.version` и `indexed_version`, находит missing/stale documents и переиндексирует `OpenSearch` | Новый или изменённый контент появляется в поиске даже при временном сбое worker-а или consumer-а |
 | Отказ `OpenSearch` | Добавлен degraded search через `Catalog API search_sql` по original `Catalog DB` | Если `OpenSearch` недоступен, `Search Service` вызывает специальный fallback-запрос в `Catalog API`, который ищет по базовым полям в основной `Catalog DB`: название, год, жанр, тип контента | Пользователь всё ещё может найти контент по базовым полям, хотя качество поиска хуже |
 | Отказ поисковых подсказок | `SearchSuggestCache Redis` используется только для autocomplete / top queries | Если `SearchSuggestCache` недоступен, отключаются или упрощаются поисковые подсказки. Сам поиск продолжает работать через `OpenSearch`, а при его отказе — через `Catalog API search_sql` | Пользователь может не увидеть подсказки при вводе запроса, но основной поиск остаётся доступен |
-| Отказ recommendation pipeline или задержка пересчёта рекомендаций | Рекомендации разделены на offline и online части: `Analytics/DWH → FeatureBuilder / Aggregation Jobs → CandidateGenerator Job → RecommendationCandidateStore Cassandra / RecommendationCache Redis`; отдельно используются `OnlineRanker` и `FallbackFeedBuilder` | Если персональные рекомендации в `Redis` недоступны, `Recommendation API` берёт stale candidates из `Cassandra`. Если персонального snapshot-а нет, используется неперсональный fallback feed: популярное, новинки, топ по жанрам | Главная страница не пустая. Пользователь получает менее персонализированную, но рабочую выдачу |
-| Потеря событий просмотров, кликов, показов и поисковых запросов | Все клиентские события идут через `Event Collector API → Kafka → Analytics Consumers / Event Ingester → ClickHouse DWH`; consumers идемпотентные, ошибки после retry уходят в `DLQ` | При временной ошибке `ClickHouse` или consumer-а событие повторяется. Если обработка невозможна после N retry, событие попадает в `DLQ topic` и может быть переобработано через `DLQ Reprocessor` | Аналитика и рекомендации могут обновиться позже, но основной просмотр, каталог и карточки не падают |
+| Отказ recommendation pipeline или задержка пересчёта рекомендаций | Рекомендации разделены на offline и online части: `Analytics/DWH - FeatureBuilder / Aggregation Jobs - CandidateGenerator Job - RecommendationCandidateStore Cassandra / RecommendationCache Redis`; отдельно используются `OnlineRanker` и `FallbackFeedBuilder` | Если персональные рекомендации в `Redis` недоступны, `Recommendation API` берёт stale candidates из `Cassandra`. Если персонального snapshot-а нет, используется неперсональный fallback feed: популярное, новинки, топ по жанрам | Главная страница не пустая. Пользователь получает менее персонализированную, но рабочую выдачу |
+| Потеря событий просмотров, кликов, показов и поисковых запросов | Все клиентские события идут через `Event Collector API - Kafka - Analytics Consumers / Event Ingester - ClickHouse DWH`; consumers идемпотентные, ошибки после retry уходят в `DLQ` | При временной ошибке `ClickHouse` или consumer-а событие повторяется. Если обработка невозможна после N retry, событие попадает в `DLQ topic` и может быть переобработано через `DLQ Reprocessor` | Аналитика и рекомендации могут обновиться позже, но основной просмотр, каталог и карточки не падают |
 | Некорректное смешение факта выдачи рекомендаций и факта клика | События хранятся в DWH как generic events: например `recommendation_list_served`, `impression`, `click`, `watch`, `rating`, `search_query_submitted` | Backend фиксирует факт формирования/выдачи списка рекомендаций, а frontend фиксирует фактические показы, клики и просмотры. В `ClickHouse DWH` это хранится через `event_name`, `user_id`, `content_id`, `ts`, `props JSON` | Данные для аналитики и рекомендаций становятся корректнее: система различает “рекомендация была выдана” и “пользователь реально увидел или кликнул” |
 | Привязка DWH к конкретным сервисам | `Analytics / DWH domain` хранит события в общей схеме: `raw_events / normalized_events`, `event_daily_agg`, `user_content_daily_agg` | DWH не содержит отдельных таблиц под конкретный сервис. Разные сервисы пишут события в общий формат через `event_name` и `props JSON`, а дальше строятся агрегаты | Аналитика проще расширяется: появление нового события не требует проектировать отдельную таблицу под каждый сервис |
 | Каскадный отказ внутренних сервисов | `timeouts`, `retry budget`, `circuit breaker` и `rate limits` настроены на уровне `L7 API Gateway / NGINX`, а не как отдельные сервисы перед каждым микросервисом | Если `Search`, `Recommendation` или `UserActivity` начинают отвечать медленно, Gateway ограничивает обращения и включает degraded response | Один зависший сервис не утягивает весь API. Карточка фильма или главная страница открываются в урезанном режиме |
@@ -886,7 +886,7 @@ graph TD
 
 Схема разделена на несколько доменов:
 
-- `Global routing / entry` — разделяет API-путь и CDN-путь. API-запросы идут через `GeoDNS / Weighted GSLB → L4 → L7 API Gateway`, а медиа и статика идут через `Anycast CDN routing → CDN Edge Cache`.
+- `Global routing / entry` — разделяет API-путь и CDN-путь. API-запросы идут через `GeoDNS / Weighted GSLB - L4 - L7 API Gateway`, а медиа и статика идут через `Anycast CDN routing - CDN Edge Cache`.
 - `User / Auth domain` — отвечает за авторизацию, сессии, профиль пользователя и регистрацию.
 - `Catalog / Search domain` — хранит master-данные каталога, обновляет `OpenSearch`, поддерживает fallback-поиск и repair-процессы.
 - `Playback / Progress domain` — отвечает за старт просмотра и сохранение прогресса через `Kafka`, `ProgressWriter`, `Cassandra` и `Redis HotProgressCache`.
