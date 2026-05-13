@@ -886,20 +886,24 @@ graph TD
 
 Схема разделена на несколько доменов:
 
-- `Global routing / entry` — разделяет API-путь и CDN-путь. API-запросы идут через `GeoDNS / Weighted GSLB - L4 - L7 API Gateway`, а медиа и статика идут через `Anycast CDN routing - CDN Edge Cache`.
-- `User / Auth domain` — отвечает за авторизацию, сессии, профиль пользователя и регистрацию.
-- `Catalog / Search domain` — хранит master-данные каталога, обновляет `OpenSearch`, поддерживает fallback-поиск и repair-процессы.
+- `Global routing / entry` — разделяет API-путь и CDN-путь. API-запросы идут через `GeoDNS / Weighted GSLB - L4 - L7 API Gateway`, а медиа и статика идут через `Anycast CDN routing → CDN Edge Cache`.
+- `User / Auth domain` — отвечает за авторизацию, сессии, профиль пользователя и регистрацию. Регистрация оформлена через `saga/retry-flow`: профиль и credentials создаются через разные сервисы, а частичные сбои обрабатываются retry/compensation.
+- `Catalog / Search domain` — хранит master-данные каталога в `Catalog DB`, обновляет `OpenSearch`, поддерживает fallback-поиск через `Catalog API search_sql` по original `Catalog DB` и содержит `SearchIndexRepair / Reindex Job` для восстановления поискового индекса.
 - `Playback / Progress domain` — отвечает за старт просмотра и сохранение прогресса через `Kafka`, `ProgressWriter`, `Cassandra` и `Redis HotProgressCache`.
-- `Content Page Composition + User Activity domain` — собирает карточку фильма и обрабатывает избранное, рейтинги и отзывы.
-- `Event / Analytics + Kafka domain` — собирает клиентские и backend-события, передаёт их в `Kafka`, `ClickHouse`, consumers и `DLQ`.
-- `Recommendation / Analytics domain` — строит offline-кандидатов, выполняет online ranking и содержит fallback feed.
+- `Content Page Composition + User Activity domain` — собирает карточку фильма и обрабатывает избранное, рейтинги и отзывы. Пользовательская активность сначала публикуется в `Kafka`, затем `UserActivity Projector Worker` обновляет `Cassandra/KV-проекции`.
+- `Event + Kafka domain` — собирает клиентские и backend-события, передаёт их в `Kafka`, поддерживает retry/DLQ и отдаёт поток событий дальше в consumers.
+- `Recommendation domain` — использует агрегаты из `Analytics/DWH`, строит offline-кандидатов через `FeatureBuilder / CandidateGenerator Job`, выполняет online ranking и содержит fallback feed.
+- `Analytics / DWH domain` — собирает generic events, нормализует события и хранит агрегаты для аналитики и рекомендаций.
 - `Media / CDN domain` — хранит origin-медиа в `S3-compatible Object Storage` и отдаёт постеры, статику и видео через CDN.
 
 1. `WatchProgress` вынесен из `PostgreSQL` в `Cassandra`; `Redis` используется как hot cache, а не как durable-хранилище.
 2. Для каталога добавлен `Catalog Outbox`, чтобы не терять события обновления контента.
-3. Для поиска добавлены `SearchIndexer`, `FallbackSearchReadModel` и `Search Reconciliation Job`.
-4. Пользовательские события идут с фронта через `Event Collector API`, а `Recommendation API` пишет только факт выдачи рекомендаций.
-5. Для поиска, рекомендаций, прогресса и карточки фильма показаны fallback-сценарии.
+3. Для поиска используется `SearchIndexer Worker` для обновления `OpenSearch`, а `SearchIndexRepair / Reindex Job` периодически сверяет `Catalog DB` и `OpenSearch`, находит missing/stale documents и переиндексирует их.
+4. Fallback поиска теперь идёт не через отдельную PostgreSQL read model, а через `Catalog API search_sql` по original `Catalog DB`.
+5. `SearchSuggestCache Redis` используется только для autocomplete / top queries и не является fallback-источником результатов поиска.
+6. Пользовательская активность больше не пишется сначала в SQL: события идут в `Kafka`, после чего `UserActivity Projector Worker` обновляет `Cassandra/KV-проекции`.
+7. Пользовательские события идут с фронта через `Event Collector API`, а факт выдачи рекомендаций фиксируется отдельным generic event, например `recommendation_list_served`.
+8. Для поиска, рекомендаций, прогресса и карточки фильма показаны fallback-сценарии.
 
 ## Часть 11. Выбор оборудования и хостинга
 
